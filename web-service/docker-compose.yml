@@ -1,0 +1,241 @@
+services:
+  db:
+    image: mysql:8.0
+    restart: always
+    environment:
+      MYSQL_DATABASE: exampledb
+      MYSQL_USER: exampleuser
+      MYSQL_PASSWORD: examplepass
+      MYSQL_RANDOM_ROOT_PASSWORD: '1'
+    volumes:
+      - db-data:/var/lib/mysql
+
+  # ==========================================
+  # 0. Joomla 3.7.0 (Port: 10000)
+  # ==========================================
+  joomla-web:
+    image: vulhub/joomla:3.7.0
+    depends_on:
+      - proxy-joomla
+    environment: 
+      - JOOMLA_DB_HOST=proxy-joomla
+      - JOOMLA_DB_PORT=3306
+      - JOOMLA_DB_USER=root
+      - JOOMLA_DB_PASSWORD=vulhub
+      - JOOMLA_DB_NAME=joomla
+    ports:
+      - "10000:80"
+
+  proxy-joomla:
+    image: python:3.9-slim
+    container_name: proxy_joomla_instance
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    command: sh -c "pip install --no-cache-dir -r requirements.txt && python mysql-proxy.py"
+    environment:
+      TARGET_HOST: joomla-db
+      TARGET_PORT: 3306
+      SERVICE_NAME: joomla
+      FORCE_UNENCRYPTED: "1"
+      ENFORCEMENT_MODE: observe
+    ports:
+      - "11000:8080"
+    depends_on:
+      - joomla-db
+
+  joomla-db:
+    image: mysql:5.7
+    environment: 
+      - MYSQL_ROOT_PASSWORD=vulhub
+
+  # ==========================================
+  # 1. ECShop 4.0.6 (Port: 10001)
+  # ==========================================
+  ecshop4-web:
+    image: vulhub/ecshop:4.0.6
+    depends_on:
+      - proxy-ecshop4
+    links:
+      - proxy-ecshop4:mysql
+    ports:
+      - "10001:80"
+
+  proxy-ecshop4:
+    image: python:3.9-slim
+    container_name: proxy_ecshop4_instance
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    command: sh -c "pip install --no-cache-dir -r requirements.txt && python mysql-proxy.py"
+    environment:
+      TARGET_HOST: ecshop4-db
+      TARGET_PORT: 3306
+      SERVICE_NAME: ecshop4
+      FORCE_UNENCRYPTED: "1"
+      ENFORCEMENT_MODE: observe
+    ports:
+      - "11001:8080"
+    depends_on:
+      - ecshop4-db
+
+  ecshop4-db:
+    image: mysql:5.5
+    environment: 
+      - MYSQL_ROOT_PASSWORD=root
+
+  # ==========================================
+  # 2. Magento 2.2.7 (Port: 10002)
+  # ==========================================
+  magento2-web:
+    image: vulhub/magento:2.2.7
+    depends_on:
+      - proxy-magento2
+    links:
+      - proxy-magento2:mysql
+    ports:
+      - "10002:80"
+
+  proxy-magento2:
+    image: python:3.9-slim
+    container_name: proxy_magento2_instance
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    command: sh -c "pip install --no-cache-dir -r requirements.txt && python mysql-proxy.py"
+    environment:
+      TARGET_HOST: magento2-db
+      TARGET_PORT: 3306
+      SERVICE_NAME: magento2
+      FORCE_UNENCRYPTED: "1"
+      ENFORCEMENT_MODE: observe
+    ports:
+      - "11002:8080"
+    depends_on:
+      - magento2-db
+
+  magento2-db:
+    image: mysql:5.7
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=magento
+
+  # ==========================================
+  # 3. ECShop 3.6.0 (Port: 10003)
+  # ==========================================
+  ecshop36-web:
+    image: vulhub/ecshop:3.6.0
+    depends_on:
+      - proxy-ecshop3
+    links:
+      - proxy-ecshop3:mysql
+    ports:
+      - "10003:80"
+
+  proxy-ecshop3:
+    image: python:3.9-slim
+    container_name: proxy_ecshop3_instance
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    command: sh -c "pip install --no-cache-dir -r requirements.txt && python mysql-proxy.py"
+    environment:
+      TARGET_HOST: ecshop3-db
+      TARGET_PORT: 3306
+      SERVICE_NAME: ecshop3
+      FORCE_UNENCRYPTED: "1"
+      ENFORCEMENT_MODE: observe
+    ports:
+      - "11003:8080"
+    depends_on:
+      - db
+
+  ecshop3-db:
+    image: mysql:5.5
+    environment: 
+      - MYSQL_ROOT_PASSWORD=root
+
+  # ==========================================
+  # 4. Drupal 7.31 (Port: 10004)
+  # ==========================================
+  drupal-web:
+    image: vulhub/drupal:7.31
+    volumes:
+    depends_on:
+      - proxy-drupal
+    links:
+      - proxy-drupal:mysql
+    ports:
+      - "10004:80"
+
+  proxy-drupal:
+    image: python:3.9-slim
+    container_name: proxy_drupal_instance
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    command: sh -c "pip install --no-cache-dir -r requirements.txt && python mysql-proxy.py"
+    environment:
+      TARGET_HOST: drupal-db
+      TARGET_PORT: 3306
+      SERVICE_NAME: drupal
+      FORCE_UNENCRYPTED: "1"
+      ENFORCEMENT_MODE: observe
+    ports:
+      - "11004:8080"
+    depends_on:
+      - drupal-db
+
+  drupal-db:
+    image: mysql:5.5
+    environment: 
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=drupal
+      
+  # ==========================================
+  # 5. WordPress (Port: 8080) 與其專屬 Proxy
+  # ==========================================
+  wordpress:
+    image: wordpress
+    restart: always
+    ports:
+      - "10005:80"
+    depends_on:
+      - proxy-wordpress
+    environment:
+      # ◄── 流量導向專屬 Proxy 容器名稱
+      WORDPRESS_DB_HOST: proxy-wordpress
+      WORDPRESS_DB_USER: exampleuser
+      WORDPRESS_DB_PASSWORD: examplepass
+      WORDPRESS_DB_NAME: exampledb
+    volumes:
+      - wordpress-data:/var/www/html
+
+  proxy-wordpress:
+    image: python:3.9-slim
+    container_name: proxy_wordpress_instance
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    working_dir: /app
+    command: sh -c "pip install --no-cache-dir -r requirements.txt && python mysql-proxy.py"
+    environment:
+      TARGET_HOST: db              # ◄── 轉發給真正的 WordPress MySQL 容器
+      TARGET_PORT: 3306
+      SERVICE_NAME: wordpress
+      FORCE_UNENCRYPTED: "1"
+      ENFORCEMENT_MODE: observe
+    ports:
+      - "11005:8080"               # ◄── 依照你的規律，WordPress Proxy 使用 11080
+    depends_on:
+      - db
+
+# 具名磁碟卷（將原來的名稱微調避免與服務名稱完全撞名導致閱讀混淆）
+volumes:
+  wordpress-data:
+  db-data:
